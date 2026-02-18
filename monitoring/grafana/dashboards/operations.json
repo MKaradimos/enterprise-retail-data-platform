@@ -1,0 +1,167 @@
+{
+  "id": null,
+  "uid": "retailnova-ops",
+  "title": "RetailNova - Pipeline Operations Dashboard",
+  "tags": ["retailnova", "data-engineering", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pipeline Executions (Last 24h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT COUNT(*) FROM execution_log WHERE started_at > NOW() - INTERVAL '24 hours'",
+          "format": "table"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "title": "Pipeline Success Rate (24h)",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT ROUND(SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) FROM execution_log WHERE started_at > NOW() - INTERVAL '24 hours'",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100, "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red",    "value": 0  },
+              { "color": "yellow", "value": 80 },
+              { "color": "green",  "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Data Quality - Pass Rate (24h)",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT ROUND(SUM(CASE WHEN status='PASS' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) FROM data_quality_log WHERE run_at > NOW() - INTERVAL '24 hours'",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100, "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red",    "value": 0  },
+              { "color": "yellow", "value": 90 },
+              { "color": "green",  "value": 98 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Total Rows Processed (24h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT COALESCE(SUM(rows_written), 0) FROM execution_log WHERE started_at > NOW() - INTERVAL '24 hours' AND status='SUCCESS'",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Pipeline Execution Timeline",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT pipeline_name, status, rows_read, rows_written, ROUND(duration_seconds, 1) AS duration_sec, started_at, completed_at, error_message FROM execution_log ORDER BY started_at DESC LIMIT 50",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Data Quality Rules Status",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT target_table, rule_type, status, severity, ROUND(pass_rate_pct,1) AS pass_rate, total_records, failed_records, run_at FROM data_quality_log ORDER BY run_at DESC LIMIT 100",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Pipeline Duration Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT started_at AS time, pipeline_name, duration_seconds AS value FROM execution_log WHERE started_at > NOW() - INTERVAL '7 days' AND status='SUCCESS' ORDER BY started_at",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Error Log (Last 7 Days)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT pipeline_name, error_type, severity, LEFT(error_message, 100) AS message, occurred_at FROM error_log WHERE occurred_at > NOW() - INTERVAL '7 days' ORDER BY occurred_at DESC LIMIT 50",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Watermark Status (CDC State)",
+      "type": "table",
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT table_name, last_watermark, last_run_at, rows_extracted, status FROM pipeline_watermarks ORDER BY table_name",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Pipeline Metrics (Rows/Hour)",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "datasource": "RetailNova-PostgreSQL",
+          "rawSql": "SELECT recorded_at AS time, metric_name, metric_value FROM pipeline_metrics WHERE metric_name LIKE '%rows%' AND recorded_at > NOW() - INTERVAL '7 days' ORDER BY recorded_at",
+          "format": "time_series"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,171 @@
+/* ─── Reset & Base ─────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+/* ─── Layout ──────────────────────────────── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 20px 0;
+  flex-shrink: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 24px;
+  border-bottom: 1px solid #334155;
+  margin-bottom: 16px;
+}
+
+.brand-icon {
+  width: 32px;
+  height: 32px;
+  background: #4f46e5;
+  color: white;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.brand-text {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.nav-link:hover { background: #334155; color: #e2e8f0; }
+.nav-link.active { background: #4f46e5; color: white; border-left: 3px solid white; }
+
+.main-content {
+  flex: 1;
+  margin-left: 220px;
+  padding: 32px;
+  max-width: 1200px;
+}
+
+/* ─── Typography ──────────────────────────── */
+h1 { font-size: 24px; font-weight: 700; margin-bottom: 20px; }
+h2 { font-size: 18px; font-weight: 600; margin: 28px 0 14px; color: #334155; }
+
+/* ─── Cards Grid ──────────────────────────── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.metric-card-bar { height: 4px; }
+
+.metric-card-body { padding: 16px; }
+.metric-title { font-size: 13px; color: #64748b; margin-bottom: 4px; }
+.metric-value { font-size: 26px; font-weight: 700; }
+.metric-subtitle { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+/* ─── Tables ──────────────────────────────── */
+.table-container {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow-x: auto;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: #f8fafc; }
+th { text-align: left; padding: 10px 14px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+tbody tr:hover { background: #f8fafc; }
+.truncate { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── Status Badge ────────────────────────── */
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ─── Tabs ────────────────────────────────── */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+
+.tab-btn {
+  padding: 8px 18px;
+  border: none;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  position: relative;
+}
+
+.tab-btn.active { background: white; color: #1e293b; box-shadow: 0 -2px 0 #4f46e5 inset; }
+
+.tab-badge {
+  background: #dc2626;
+  color: white;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+/* ─── Charts ──────────────────────────────── */
+.chart-container {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 20px;
+}
+
+/* ─── Two column layout ───────────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ─── Cohort table ────────────────────────── */
+.cohort-table td, .cohort-table th { padding: 8px 10px; text-align: center; font-size: 12px; }
+
+/* ─── States ──────────────────────────────── */
+.loading { text-align: center; padding: 60px; color: #64748b; font-size: 16px; }
+.error { text-align: center; padding: 60px; color: #dc2626; }

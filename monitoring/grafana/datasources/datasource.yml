@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: RetailNova-PostgreSQL
+    type: postgres
+    url: metadata_db:5432
+    database: retailnova_metadata
+    user: retailnova
+    secureJsonData:
+      password: "RetailNova@2024"
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    isDefault: true
+    editable: true

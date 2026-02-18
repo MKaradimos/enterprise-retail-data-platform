@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.eggs/
+htmlcov/
+.coverage
+
+# Environment
+.env
+*.env.local
+
+# Spark / Delta
+derby.log
+metastore_db/
+spark-warehouse/
+/tmp/
+
+# IDE / Tools
+.vscode/settings.json
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Data files (never commit actual data)
+*.parquet
+*.delta
+*.csv
+*.json.gz
+
+# Logs
+*.log
+logs/
+
+# Node / Frontend
+node_modules/
+dashboard/frontend/dist/
+
+# Docker override (local dev only)
+docker/docker-compose.override.yml
