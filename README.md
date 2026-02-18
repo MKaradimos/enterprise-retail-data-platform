@@ -1,367 +1,631 @@
-# 🏭 RetailNova Enterprise Data Platform
-
-> **Production-ready cloud data engineering platform** built with Azure-equivalent technologies.
-> Simulates a real consulting delivery for a retail company migrating from on-prem SQL Server to a cloud data lake.
+<p align="center">
+  <h1 align="center">RetailNova Enterprise Data Platform</h1>
+  <p align="center">
+    <strong>Production-grade data engineering platform</strong> built with Azure-equivalent technologies.<br/>
+    End-to-end Medallion Architecture — from raw OLTP extraction to business-ready analytics and live dashboards.
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/PySpark-3.5.0-orange?logo=apachespark" alt="PySpark"/>
+    <img src="https://img.shields.io/badge/Delta_Lake-3.1.0-00ADD8?logo=delta" alt="Delta Lake"/>
+    <img src="https://img.shields.io/badge/FastAPI-0.109+-009688?logo=fastapi" alt="FastAPI"/>
+    <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React"/>
+    <img src="https://img.shields.io/badge/Docker_Compose-8_services-2496ED?logo=docker" alt="Docker"/>
+    <img src="https://img.shields.io/badge/Tests-30_passing-brightgreen?logo=pytest" alt="Tests"/>
+  </p>
+</p>
 
 ---
 
-## 📋 Executive Summary
+## Table of Contents
 
-RetailNova is a Greek retail chain operating 4 physical stores and an online channel.
-Their legacy setup — on-prem SQL Server + manual Excel reporting — could not support
-growth, lacked data governance, and had zero automation.
+- [Executive Summary](#executive-summary)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Running the Pipeline](#running-the-pipeline)
+- [Analytics Dashboard](#analytics-dashboard)
+- [Data Flow & Patterns](#data-flow--patterns)
+- [Data Quality Framework](#data-quality-framework)
+- [Gold Layer — KPIs & Analytics](#gold-layer--kpis--analytics)
+- [Test Suite](#test-suite)
+- [Monitoring](#monitoring)
+- [Security & Governance](#security--governance)
+- [Scalability Roadmap](#scalability-roadmap)
+- [CLI Reference](#cli-reference)
+
+---
+
+## Executive Summary
+
+**RetailNova** is a Greek retail chain operating 4 physical stores and an online channel. Their legacy setup — on-prem SQL Server with manual Excel reporting — could not support growth, lacked data governance, and had zero automation.
 
 This platform delivers:
-- **Automated daily ingestion** from SQL Server via incremental CDC
-- **Medallion Architecture** (Bronze → Silver → Gold) in Delta Lake format
-- **Star Schema** dimensional model for analytics
-- **Data Quality Framework** with 20+ configurable rules
-- **Real-time monitoring** dashboard via Grafana
-- **Unit test suite** covering all transformation logic
+
+| Business Objective | Solution |
+|---|---|
+| Replace manual Excel reporting | Gold layer star schema + React analytics dashboard |
+| Automate daily data refresh | Master pipeline with retry logic & exponential backoff |
+| Ensure data accuracy | Data Quality Framework with 18 configurable rules |
+| Enable cloud scalability | Delta Lake on S3-compatible storage (Azure Data Lake Gen2 equivalent) |
+| Unlock AI/ML capabilities | Feature-ready Gold layer (RFM segmentation, CLV, cohort retention) |
+| GDPR compliance | PII masking (SHA-256) at Silver layer + full audit trail |
 
 ---
 
-## 🎯 Business Objectives
+## Architecture
 
-| Objective | Solution |
-|-----------|----------|
-| Replace manual Excel reporting | Gold layer + Grafana/Power BI |
-| Automate daily data refresh | Master pipeline with retry logic |
-| Ensure data accuracy | DQ Framework with configurable thresholds |
-| Cloud scalability | Delta Lake on object storage (S3/ADLS) |
-| Enable future AI/ML | Feature-ready Gold layer (RFM, CLV, cohorts) |
-| GDPR compliance | PII masking at Silver layer + audit logs |
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  SOURCE LAYER                                                            │
+│  SQL Server 2022 (RetailNova_OLTP)                                      │
+│  Tables: customers · products · stores · sales_orders · order_lines     │
+└───────────────────────────┬──────────────────────────────────────────────┘
+                            │  JDBC Incremental Extraction
+                            │  (Watermark-based CDC)
+                            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  BRONZE LAYER  (Raw / Immutable)                                         │
+│  Format: Delta Lake │ Partition: year/month │ Mode: APPEND only          │
+│  Audit columns: _extracted_at, _run_id, _source_table                   │
+└───────────────────────────┬──────────────────────────────────────────────┘
+                            │  Clean · Validate · Deduplicate · SCD2
+                            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  SILVER LAYER  (Cleaned / Business-Validated)                            │
+│  Format: Delta Lake │ Mode: MERGE (upsert)                               │
+│  SCD Type 2 (customers) │ PII masked (SHA-256) │ DQ validated           │
+└───────────────────────────┬──────────────────────────────────────────────┘
+                            │  Star Schema · KPIs · Aggregations
+                            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  GOLD LAYER  (Business-Ready)                                            │
+│  Dimensions: dim_customer · dim_product · dim_store · dim_date          │
+│  Facts: fact_sales                                                       │
+│  Analytics: agg_monthly_kpis · cohort_analysis · customer_segments      │
+└───────────────────────────┬──────────────────────────────────────────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+     React Dashboard              Grafana Monitoring
+     (FastAPI backend)            (Pipeline Operations)
+```
+
+### Infrastructure (Docker Compose)
+
+| Service | Azure Equivalent | Local Port | Purpose |
+|---|---|---|---|
+| SQL Server 2022 | Azure SQL Database | `1433` | OLTP source system |
+| MinIO | Azure Data Lake Gen2 | `9000` / `9001` | Delta Lake storage |
+| Apache Spark 3.5 | Azure Databricks | `7077` / `8081` | Processing engine |
+| Spark Worker | Databricks Worker | — | Distributed compute |
+| PostgreSQL 15 | Azure SQL (metadata) | `5433` | Pipeline metadata store |
+| Jupyter Lab | Databricks Notebooks | `8888` | Interactive exploration |
+| Grafana | Power BI / Azure Monitor | `3001` | Operations dashboards |
 
 ---
 
-## 🏗 Architecture
+## Tech Stack
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  SOURCE LAYER                                                │
-│  SQL Server (RetailNova_OLTP)                               │
-│  Tables: customers, products, stores, orders, order_lines   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ JDBC Incremental (watermark CDC)
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  BRONZE LAYER  (Raw / Immutable)                             │
-│  Format: Delta | Partition: year/month                      │
-│  Mode: APPEND only (never overwrite)                        │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Clean + Validate + SCD2
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  SILVER LAYER  (Cleaned / Business-validated)                │
-│  Format: Delta | Mode: MERGE (upsert)                       │
-│  SCD2 customers | PII masked | DQ validated                 │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Star Schema + KPIs + Aggregations
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  GOLD LAYER  (Business-Ready)                                │
-│  dim_customer | dim_product | dim_store | dim_date          │
-│  fact_sales | agg_monthly_kpis | cohort_analysis            │
-│  customer_segments (RFM)                                    │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-              Power BI / Grafana Dashboards
-```
-
-### Local Stack (Docker)
-| Component | Azure Equivalent | Port |
-|-----------|-----------------|------|
-| SQL Server 2022 | Azure SQL Database | 1433 |
-| MinIO | Azure Data Lake Gen2 | 9000/9001 |
-| Apache Spark 3.5 | Azure Databricks | 7077/8080 |
-| Jupyter Lab | Databricks Notebooks | 8888 |
-| PostgreSQL | Azure SQL (metadata) | 5432 |
-| Grafana | Power BI / Azure Monitor | 3000 |
+| Layer | Technologies |
+|---|---|
+| **Processing** | PySpark 3.5.0, Delta Lake 3.1.0 |
+| **Storage** | MinIO (S3-compatible), Delta format, Parquet |
+| **Source DB** | SQL Server 2022 (JDBC) |
+| **Metadata DB** | PostgreSQL 15 |
+| **Dashboard** | React 18, Vite, Recharts, Axios |
+| **API** | FastAPI, Uvicorn, deltalake (delta-rs) |
+| **Monitoring** | Grafana (pre-configured dashboards) |
+| **Testing** | pytest (30 unit tests), local Spark mode |
+| **Infrastructure** | Docker Compose (8 services) |
+| **Languages** | Python, SQL, JavaScript (JSX) |
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker Desktop (4GB RAM minimum)
-- Python 3.9+
-- Git
-
-### 1. Clone & Setup
-```bash
-git clone https://github.com/your-username/enterprise-retail-data-platform
-cd enterprise-retail-data-platform
-
-# Windows
-setup_windows.bat
-
-# macOS / Linux
-chmod +x setup.sh && ./setup.sh
-```
-
-### 2. Run the Full Pipeline
-```bash
-python run_pipeline.py --layer all
-```
-
-### 3. Run Tests
-```bash
-python run_pipeline.py --tests
-# or
-python -m pytest tests/test_pipeline.py -v
-```
-
-### 4. Open Jupyter (interactive)
-```
-http://localhost:8888   (token: retailnova2024)
-
-Notebooks:
-  01_bronze_ingestion.ipynb  - Bronze CDC demo
-  02_silver_scd2.ipynb       - SCD2 + DQ checks
-  03_gold_analytics.ipynb    - Star schema + KPIs
-```
-
-### 5. Monitor in Grafana
-```
-http://localhost:3000   (admin / RetailNova@2024)
-Dashboard: "RetailNova - Pipeline Operations Dashboard"
-```
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 enterprise-retail-data-platform/
-├── docker/
-│   └── docker-compose.yml          # All services
-├── scripts/
-│   ├── sql/01_seed_oltp.sql         # SQL Server source data
-│   └── postgres/01_init_metadata.sql# Metadata DB schema + DQ rules
-├── pipelines/
-│   ├── config.py                    # Central configuration
-│   ├── spark_session.py             # SparkSession builder
-│   ├── logger.py                    # Structured pipeline logging
-│   ├── bronze_ingestion.py          # Layer 1: Raw extraction
-│   ├── silver_transformation.py     # Layer 2: Clean + SCD2
-│   ├── gold_pipeline.py             # Layer 3: Star schema + KPIs
-│   └── master_pipeline.py           # Orchestrator with retry/alerts
+│
+├── pipelines/                          # Core ETL pipeline code
+│   ├── config.py                       #   Central configuration (env-aware)
+│   ├── spark_session.py                #   SparkSession builder (Delta + S3A)
+│   ├── logger.py                       #   Structured logging to PostgreSQL
+│   ├── bronze_ingestion.py             #   Layer 1: Raw JDBC extraction
+│   ├── silver_transformation.py        #   Layer 2: Clean + SCD2 + masking
+│   ├── gold_pipeline.py                #   Layer 3: Star schema + KPIs
+│   └── master_pipeline.py              #   Orchestrator (retry, branching, SLA)
+│
 ├── quality_framework/
-│   └── dq_engine.py                 # Generic DQ rule engine
-├── notebooks/
-│   ├── 01_bronze_ingestion.ipynb
-│   ├── 02_silver_scd2.ipynb
-│   └── 03_gold_analytics.ipynb
-├── monitoring/
-│   └── grafana/
-│       ├── datasources/             # Auto-configured PostgreSQL
-│       └── dashboards/              # Pre-built operations dashboard
+│   └── dq_engine.py                    # Metadata-driven DQ rule engine
+│
+├── dashboard/
+│   ├── backend/                        # FastAPI API server
+│   │   ├── main.py                     #   App + CORS + router mounting
+│   │   ├── config.py                   #   Reads project .env
+│   │   ├── db.py                       #   PostgreSQL query helper
+│   │   ├── delta_reader.py             #   Gold Delta table reader (delta-rs)
+│   │   └── routers/
+│   │       ├── overview.py             #   GET /api/overview
+│   │       ├── kpis.py                 #   GET /api/kpis/monthly
+│   │       ├── customers.py            #   GET /api/customers/segments, /cohorts
+│   │       ├── quality.py              #   GET /api/quality/rules, /log, /summary
+│   │       └── pipeline.py             #   GET /api/pipeline/executions, /errors, /watermarks
+│   └── frontend/                       # React + Vite SPA
+│       └── src/
+│           ├── pages/
+│           │   ├── Overview.jsx        #   KPI cards + latest runs
+│           │   ├── KPIs.jsx            #   Revenue, AOV, basket charts
+│           │   ├── Customers.jsx       #   RFM pie chart + cohort heatmap
+│           │   ├── DataQuality.jsx     #   DQ rules + pass rates
+│           │   └── PipelineMonitor.jsx #   Executions / errors / watermarks
+│           └── components/
+│               ├── Layout.jsx          #   Sidebar + content shell
+│               ├── Sidebar.jsx         #   Navigation with icons
+│               ├── MetricCard.jsx      #   KPI card component
+│               └── StatusBadge.jsx     #   Colored status badges
+│
 ├── tests/
-│   └── test_pipeline.py             # 25+ unit tests
-├── documentation/
-│   └── architecture.md              # Design decisions
-├── run_pipeline.py                  # CLI entry point
-├── requirements.txt
-├── setup.sh                         # macOS/Linux setup
-└── setup_windows.bat                # Windows setup
+│   ├── conftest.py                     # Auto-mock PG, session-scoped Spark
+│   └── test_pipeline.py               # 30 unit tests (7 test classes)
+│
+├── notebooks/
+│   ├── 01_bronze_ingestion.ipynb       # Interactive Bronze demo
+│   ├── 02_silver_scd2.ipynb            # SCD2 + DQ walkthrough
+│   └── 03_gold_analytics.ipynb         # Star schema + KPIs
+│
+├── scripts/
+│   ├── sql/01_seed_oltp.sql            # SQL Server seed data
+│   └── postgres/01_init_metadata.sql   # Metadata schema + DQ rules
+│
+├── docker/docker-compose.yml           # 8-service Docker stack
+├── monitoring/grafana/                 # Pre-configured Grafana dashboards
+├── documentation/architecture.md       # Design decisions document
+│
+├── run_pipeline.py                     # CLI entry point
+├── Makefile                            # Shortcut commands (Linux/macOS)
+├── setup.sh                            # First-time setup script
+├── requirements.txt                    # Python dependencies
+└── .env.example                        # Environment template
 ```
 
 ---
 
-## 🔄 Data Flow & Patterns
+## Getting Started
 
-### Incremental Load (CDC)
-```python
-# Watermark-based: only extract rows changed since last run
-WHERE last_modified > '2024-11-30 00:00:00'  # from watermarks table
+### Prerequisites
 
-# After success: update watermark to NOW()
-UPDATE pipeline_watermarks SET last_watermark = NOW() WHERE table_name = 'customers'
+| Requirement | Minimum | Notes |
+|---|---|---|
+| Docker Desktop | 4 GB RAM | Runs all 8 services |
+| Python | 3.8+ | PySpark, FastAPI |
+| Java | 11+ (OpenJDK) | Required by Spark |
+| Node.js | 16+ | React dashboard |
+| Git | Any | Version control |
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/MKaradimos/enterprise-retail-data-platform.git
+cd enterprise-retail-data-platform
 ```
+
+### 2. First-Time Setup
+
+```bash
+# Linux / macOS
+make setup
+
+# Or manually:
+cp .env.example .env
+pip install -r requirements.txt
+docker compose -f docker/docker-compose.yml up -d
+# Wait for SQL Server to become healthy (~40s), then seed:
+make seed
+```
+
+### 3. Verify Services
+
+```bash
+make status
+```
+
+Expected output:
+```
+  ✓ localhost:1433  reachable    (SQL Server)
+  ✓ localhost:9000  reachable    (MinIO)
+  ✓ localhost:5433  reachable    (PostgreSQL)
+  ✓ localhost:7077  reachable    (Spark Master)
+  ✓ localhost:8888  reachable    (Jupyter)
+  ✓ localhost:3001  reachable    (Grafana)
+```
+
+---
+
+## Running the Pipeline
+
+### Full Pipeline (Bronze → Silver → Gold → Quality)
+
+```bash
+make run
+# or: python run_pipeline.py --layer all
+```
+
+### Individual Layers
+
+```bash
+make run-bronze       # Extract from SQL Server → Bronze Delta tables
+make run-silver       # Clean, SCD2, mask → Silver Delta tables
+make run-gold         # Star schema, KPIs, RFM, cohorts → Gold Delta tables
+make run-quality      # Run 18 data quality checks
+```
+
+### Pipeline Output Example
+
+```
+  ══════════════════════════════════════════════════════
+    BRONZE LAYER  |  2026-02-17 12:45:33
+  ══════════════════════════════════════════════════════
+    [customers]          10 rows extracted ✓
+    [products]           20 rows extracted ✓
+    [stores]              5 rows extracted ✓
+    [sales_orders]       20 rows extracted ✓
+    [sales_order_lines]  33 rows extracted ✓
+
+  ══════════════════════════════════════════════════════
+    GOLD LAYER BUILD  |  2026-02-17 12:46:01
+  ══════════════════════════════════════════════════════
+    [dim_date]     4,018 rows written ✓
+    [dim_customer]    10 rows written ✓
+    [dim_product]     20 rows written ✓
+    [dim_store]        5 rows written ✓
+    [fact_sales]      30 rows written ✓
+    [monthly_kpis]     4 rows written ✓
+    [cohort]           7 rows written ✓
+    [segments]        10 rows written ✓
+
+  DATA QUALITY: 17/18 PASS, 1 WARNING (orders_freshness)
+```
+
+---
+
+## Analytics Dashboard
+
+The React + FastAPI dashboard visualises all pipeline results in real-time.
+
+### Start the Dashboard
+
+```bash
+# Terminal 1 — Backend (port 8000)
+cd dashboard/backend
+pip install -r requirements.txt
+uvicorn main:app --port 8000 --reload
+
+# Terminal 2 — Frontend (port 5173)
+cd dashboard/frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** in your browser.
+
+### Dashboard Pages
+
+| Page | Description | Data Source |
+|---|---|---|
+| **Overview** | 4 KPI cards (revenue, orders, customers, DQ pass rate) + latest pipeline runs | PostgreSQL + Gold Delta |
+| **KPIs** | Monthly revenue bar chart, orders/customers line chart, AOV trend | Gold `agg_monthly_kpis` |
+| **Customers** | RFM segment pie chart with stats table + cohort retention heatmap | Gold `customer_segments` + `cohort_analysis` |
+| **Data Quality** | Overall pass rate, rules table, latest check results with severity badges | PostgreSQL `data_quality_log` |
+| **Pipeline Monitor** | 3 tabs: Execution History, Errors, Watermarks | PostgreSQL metadata tables |
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Health check |
+| `/api/overview` | GET | Headline KPIs + latest runs + DQ summary |
+| `/api/kpis/monthly` | GET | Monthly KPI array (revenue, AOV, basket, CLV) |
+| `/api/customers/segments` | GET | RFM segment distribution + per-customer scores |
+| `/api/customers/cohorts` | GET | Cohort retention matrix |
+| `/api/quality/rules` | GET | Active DQ rule definitions |
+| `/api/quality/log` | GET | Latest 100 DQ check results |
+| `/api/quality/summary` | GET | PASS/FAIL/WARNING counts |
+| `/api/pipeline/executions` | GET | Paginated execution history |
+| `/api/pipeline/errors` | GET | Latest 50 pipeline errors |
+| `/api/pipeline/watermarks` | GET | CDC watermark statuses |
+
+---
+
+## Data Flow & Patterns
+
+### Incremental Load (Watermark CDC)
+
+```
+                    PostgreSQL (Watermarks)
+                    ┌──────────────────────────────────────┐
+                    │ table_name       │ last_watermark     │
+                    │ src_customers    │ 2026-02-17 12:45   │
+                    │ src_sales_orders │ 2026-02-17 12:45   │
+                    └──────────────────────────────────────┘
+                              │
+                              ▼
+Extract:  SELECT * FROM customers WHERE last_modified > '2026-02-17 12:45'
+                              │
+                              ▼
+Success:  UPDATE pipeline_watermarks SET last_watermark = NOW()
+```
+
+Only new/changed records are extracted on each run — no full table scans.
 
 ### SCD Type 2 (Customers)
-```
-Customer 1 changes city: Athens → Piraeus
 
-Before:
-  customer_id=1, city=Athens, is_current=TRUE
+When a tracked column changes (address, email, loyalty_tier), the Silver layer preserves history:
+
+```
+Before: customer_id=1, city=Athens,  is_current=TRUE
 
 After MERGE:
-  customer_id=1, city=Athens,  effective_end=2024-06-15, is_current=FALSE
-  customer_id=1, city=Piraeus, effective_end=NULL,       is_current=TRUE
+  customer_id=1, city=Athens,  effective_end=2026-02-17, is_current=FALSE  ← expired
+  customer_id=1, city=Piraeus, effective_end=NULL,       is_current=TRUE   ← new current
 ```
 
-### Data Quality Rules (from DB)
+### PII Masking (Silver Layer)
+
+```python
+# Email: user@example.com → SHA-256 hash
+# Phone: +30-210-1234567 → SHA-256 hash
+# Applied at Silver layer — Gold layer contains no recoverable PII
+```
+
+---
+
+## Data Quality Framework
+
+The DQ engine is **metadata-driven** — rules are stored in PostgreSQL, not hardcoded:
+
 ```sql
--- Rules stored in data_quality_rules table
--- Engine reads rules dynamically and executes them
-SELECT * FROM data_quality_rules WHERE is_active = TRUE;
+SELECT rule_name, target_table, rule_type, threshold_pct, severity
+FROM data_quality_rules WHERE is_active = TRUE;
+```
 
--- Results written to data_quality_log
-SELECT * FROM data_quality_log ORDER BY run_at DESC LIMIT 20;
+### Supported Rule Types
+
+| Rule Type | Description | Example |
+|---|---|---|
+| `not_null` | Column must not contain NULLs | `email` in customers |
+| `unique` | Column values must be unique | `product_code` in products |
+| `range` | Values within min/max bounds | `unit_price` between 0.01 and 99,999 |
+| `regex` | Values match a pattern | Email format `^[^@]+@[^@]+\.[^@]+$` |
+| `freshness` | Latest record within N days | Orders not older than 2 days |
+| `row_count` | Minimum row count threshold | At least 1 customer exists |
+| `completeness` | % of non-null values above threshold | 80%+ phones filled |
+
+### Current Rules (18 active)
+
+- **5** Not Null checks (CRITICAL)
+- **3** Uniqueness checks (CRITICAL)
+- **3** Range checks (WARNING)
+- **2** Regex checks (WARNING/INFO)
+- **2** Row Count checks (CRITICAL)
+- **1** Freshness check (WARNING)
+- **2** Completeness checks (INFO/WARNING)
+
+Adding a new rule requires only a database INSERT — no code changes needed.
+
+---
+
+## Gold Layer — KPIs & Analytics
+
+### Star Schema
+
+```
+                    ┌──────────┐
+                    │ dim_date │
+                    └────┬─────┘
+                         │
+┌──────────────┐    ┌────┴─────┐    ┌─────────────┐
+│ dim_customer ├────┤fact_sales├────┤ dim_product  │
+└──────────────┘    └────┬─────┘    └─────────────┘
+                         │
+                    ┌────┴─────┐
+                    │dim_store │
+                    └──────────┘
+```
+
+### Computed KPIs
+
+| KPI | Description | Table |
+|---|---|---|
+| Total Revenue | Sum of line amounts (Delivered/Shipped orders) | `agg_monthly_kpis` |
+| Average Order Value | Revenue / Order Count | `agg_monthly_kpis` |
+| Basket Size | Avg items per order | `agg_monthly_kpis` |
+| Unique Customers | Monthly distinct buyers | `agg_monthly_kpis` |
+| Customer Lifetime Value | Avg total spend per customer (lifetime) | `agg_monthly_kpis` |
+| Repeat Purchase Rate | % of customers with 2+ orders | `agg_monthly_kpis` |
+| RFM Segments | Champions, Loyal, Promising, At Risk, Need Attention | `customer_segments` |
+| Cohort Retention | Month-over-month retention by acquisition cohort | `cohort_analysis` |
+
+### RFM Segmentation Logic
+
+Each customer is scored 1–4 on three dimensions:
+
+| Dimension | Score 4 | Score 3 | Score 2 | Score 1 |
+|---|---|---|---|---|
+| **Recency** (days since last order) | ≤ 30 | ≤ 60 | ≤ 90 | > 90 |
+| **Frequency** (order count) | ≥ 5 | ≥ 3 | ≥ 2 | 1 |
+| **Monetary** (total spend) | ≥ $2,000 | ≥ $1,000 | ≥ $300 | < $300 |
+
+Segment assignment:
+- **Champions** — R ≥ 3, F ≥ 3, M ≥ 3
+- **Loyal Customers** — R ≥ 3, F ≥ 2
+- **Promising** — R ≥ 3, F = 1
+- **At Risk** — R = 2, F ≥ 2
+- **Need Attention** — R ≤ 2
+
+---
+
+## Test Suite
+
+30 unit tests across 7 test classes, running in **local Spark mode** (no Docker needed):
+
+```bash
+make test          # Quick run
+make test-verbose  # Full output
+make test-coverage # With coverage report
+```
+
+### Test Classes
+
+| Class | Tests | What It Validates |
+|---|---|---|
+| `TestSilverCustomerTransformation` | 7 | Email lowercase/trim, name initcap, country uppercase, age calculation, regex, dedup |
+| `TestSilverProductTransformation` | 3 | Product code uppercase, name trim, zero-price filter |
+| `TestSilverOrderTransformation` | 3 | Negative shipping → 0, discount > 100% → 0, suspicious order flag |
+| `TestDataQualityRules` | 6 | Not null, unique, range rules — PASS and FAIL scenarios |
+| `TestSchemaValidation` | 3 | Required columns present, missing detected, extras allowed |
+| `TestRowCountReconciliation` | 2 | Bronze-to-Silver count, dedup reduces count |
+| `TestNegativeScenarios` | 6 | Null email, negative qty, schema mismatch, SCD2 change detection |
+
+---
+
+## Monitoring
+
+### Grafana (Operations Dashboard)
+
+Pre-configured at **http://localhost:3001** (admin / RetailNova@2024):
+- Pipeline execution timeline
+- Success/failure rates
+- Duration trends
+- Data quality pass rates
+- Error log
+
+### PostgreSQL Metadata (Quick Queries)
+
+```bash
+make watermarks       # CDC watermark statuses
+make quality-report   # Latest DQ results
+make exec-log         # Pipeline execution history
+make errors           # Recent errors
 ```
 
 ---
 
-## 📊 KPIs Computed
-
-| KPI | Description |
-|-----|-------------|
-| **Total Revenue** | Sum of line amounts for Delivered/Shipped orders |
-| **Average Order Value (AOV)** | Revenue / Order Count |
-| **Basket Size** | Avg items per order |
-| **Unique Customers** | Monthly distinct buyers |
-| **Customer Lifetime Value (CLV)** | Avg total spend per customer |
-| **Repeat Purchase Rate** | % customers with 2+ orders |
-| **RFM Segments** | Champions, Loyal, At-Risk, Lost, New |
-| **Cohort Retention** | Month-0 through Month-N retention by acquisition cohort |
-
----
-
-## 🛡 Data Governance
+## Security & Governance
 
 ### PII Handling
-- **Silver layer**: email and phone SHA-256 hashed
-- **Gold layer**: no direct PII (aggregate/segment only)
-- **Audit trail**: every pipeline run logged with run_id
 
-### Access Control (Azure RBAC simulation)
+| Layer | PII Treatment |
+|---|---|
+| Bronze | Raw (as extracted from source) |
+| Silver | SHA-256 hashed (email, phone) |
+| Gold | No direct PII (aggregates / segments only) |
+
+### Access Control (Azure RBAC Simulation)
+
 ```
-Bronze  → data_engineers group only
+Bronze  → data_engineers (read/write)
 Silver  → data_engineers (write), data_analysts (read)
 Gold    → data_engineers (write), bi_users (read)
 ```
 
 ### GDPR Right to Erasure
-```sql
--- Soft-delete customer (no hard deletes in Delta)
-UPDATE dbo.customers SET is_active = FALSE WHERE customer_id = ?
 
--- Next pipeline run: SCD2 expires the record
--- Masked data in Silver means no recoverable PII
+```
+1. Source: UPDATE customers SET is_active = FALSE WHERE customer_id = ?
+2. Next pipeline run: SCD2 expires the record
+3. Silver: PII already masked → no recoverable personal data
+4. Audit trail retained for 90 days
 ```
 
 ---
 
-## ⚙️ Pipeline CLI Reference
+## Scalability Roadmap
+
+| Phase | Feature | Impact |
+|---|---|---|
+| **Current** | Daily batch pipeline | Production baseline |
+| **Phase 2** | Streaming micro-batch (5 min) | Near-real-time analytics |
+| **Phase 3** | Feature Store + Azure ML | Churn prediction, price optimisation |
+| **Phase 4** | Data Mesh | Decentralised domain ownership |
+
+### Scaling to 100x Volume
+
+| Change | Rationale |
+|---|---|
+| JDBC → Debezium CDC + Event Hubs + Auto Loader | JDBC polling doesn't scale for high-volume CDC |
+| `shuffle.partitions`: 4 → 400+ | Avoid task skew with large datasets |
+| Z-ORDER on `fact_sales(order_date, customer_id)` | Faster range scans |
+| Delta Liquid Clustering | Auto-optimise data layout at write time |
+| Separate job clusters per layer | Different latency SLAs for Silver vs Gold |
+| Databricks Photon engine | 2-3x faster for Gold aggregations |
+
+---
+
+## CLI Reference
 
 ```bash
-# Full end-to-end pipeline
-python run_pipeline.py --layer all
+# ─── Pipeline ────────────────────────────────
+make run              # Full pipeline: Bronze → Silver → Gold → Quality
+make run-bronze       # Bronze layer only
+make run-silver       # Silver layer only
+make run-gold         # Gold layer only
+make run-quality      # Data quality checks only
+make run-fast         # Full pipeline, skip quality checks
 
-# Individual layers
-python run_pipeline.py --layer bronze
-python run_pipeline.py --layer silver
-python run_pipeline.py --layer gold
-python run_pipeline.py --layer quality
+# ─── Testing ─────────────────────────────────
+make test             # Unit tests (local Spark, no Docker)
+make test-verbose     # Tests with full output
+make test-coverage    # Tests with coverage report
 
-# Specific tables only (bronze)
-python run_pipeline.py --layer bronze --tables customers products
+# ─── Infrastructure ──────────────────────────
+make setup            # First-time setup (Docker + DB seed)
+make status           # Container health + port check
+make seed             # Re-seed SQL Server data
+make restart          # Restart all containers
+make down             # Stop containers
+make clean            # Remove containers + volumes (destroys data)
 
-# Stop on first failure
-python run_pipeline.py --layer all --fail-fast
+# ─── Monitoring ──────────────────────────────
+make logs             # Tail all container logs
+make watermarks       # Show CDC watermark statuses
+make quality-report   # Latest DQ check results
+make exec-log         # Pipeline execution history
+make errors           # Recent pipeline errors
 
-# Skip DQ checks (faster dev iteration)
-python run_pipeline.py --layer all --skip-quality
-
-# Check service connectivity
-python run_pipeline.py --status
-
-# Run test suite
-python run_pipeline.py --tests
+# ─── Browser Shortcuts ───────────────────────
+make jupyter          # Open Jupyter Lab
+make grafana          # Open Grafana
+make spark            # Open Spark UI
+make minio            # Open MinIO Console
+make psql             # Connect to PostgreSQL
 ```
 
 ---
 
-## 🧪 Test Coverage
+## Environment Variables
 
-```
-tests/test_pipeline.py - 25 unit tests
+Copy `.env.example` to `.env` and adjust if needed:
 
-TestSilverCustomerTransformation  (7 tests)
-  ✓ email lowercase and trim
-  ✓ first name initcap
-  ✓ country uppercase
-  ✓ age calculation
-  ✓ email regex valid
-  ✓ email regex invalid
-  ✓ deduplication keeps latest record
-
-TestSilverProductTransformation   (3 tests)
-  ✓ product code uppercase
-  ✓ product name trimmed
-  ✓ zero price filtered
-
-TestSilverOrderTransformation     (3 tests)
-  ✓ negative shipping cost zeroed
-  ✓ discount > 100% zeroed
-  ✓ suspicious order flag
-
-TestDataQualityRules              (6 tests)
-  ✓ not_null PASS / FAIL
-  ✓ unique PASS / FAIL
-  ✓ range PASS / FAIL
-  ✓ completeness threshold
-
-TestSchemaValidation              (3 tests)
-  ✓ required columns present
-  ✓ missing column detected
-  ✓ extra columns allowed
-
-TestRowCountReconciliation        (2 tests)
-  ✓ bronze-to-silver count
-  ✓ deduplication reduces count
-
-TestNegativeScenarios             (4 tests)
-  ✓ null email caught by DQ
-  ✓ negative quantity filtered
-  ✓ corrupt file schema mismatch
-  ✓ order total mismatch detection
-  ✓ SCD2 address change detection
-```
+| Variable | Default | Description |
+|---|---|---|
+| `RETAILNOVA_ENV` | `dev` | Environment (dev / test / prod) |
+| `SQLSERVER_HOST` | `localhost` | SQL Server hostname |
+| `SQLSERVER_PORT` | `1433` | SQL Server port |
+| `MINIO_ENDPOINT` | `http://localhost:9000` | MinIO S3 endpoint |
+| `MINIO_BUCKET` | `retailnova-dev` | Storage bucket name |
+| `POSTGRES_HOST` | `localhost` | Metadata DB hostname |
+| `POSTGRES_PORT` | `5433` | Metadata DB port |
+| `SPARK_MASTER` | `local[*]` | Spark master URL |
 
 ---
 
-## 🧠 Interview Q&A Guide
+## License
 
-**Q: How did you implement SCD Type 2?**
-> Delta MERGE with change detection condition. When tracked columns (address, email, loyalty_tier) differ between source and target, the old row gets `effective_end_date = NOW()` and `is_current = FALSE`. A new row is inserted by `whenNotMatchedInsertAll()`. Non-tracked column updates (name, phone) use `whenMatchedUpdate()` without expiring the row.
-
-**Q: How does your incremental loading work?**
-> Watermark table in PostgreSQL stores the `last_modified` timestamp per source table. Each run reads `WHERE last_modified > watermark`, processes the data, then updates the watermark to `NOW()`. This is a high-water mark pattern. For production we'd upgrade to Debezium CDC → Event Hubs → Auto Loader.
-
-**Q: How did you design the data quality framework?**
-> Rules are stored as rows in `data_quality_rules` table (rule_type, threshold, severity). The DQ engine loads all active rules, dispatches each to a type-specific executor function, captures pass/fail rates, and writes results to `data_quality_log`. Critical failures trigger alerts. This makes it metadata-driven — adding a new rule needs only a DB INSERT, not a code change.
-
-**Q: How do you handle pipeline failures?**
-> Master pipeline uses a retry wrapper with exponential backoff (delay * 2^attempt). Each child pipeline runs in its own `pipeline_run()` context manager which logs start/end/duration/rows. If Bronze fails, Silver is automatically skipped (conditional branching). Alerts are sent on failure and SLA breach. All errors are logged to `error_log` with stack traces.
-
-**Q: How would you scale this to 100x data?**
-> Switch from JDBC polling to streaming CDC (Debezium → Event Hubs → Auto Loader). Increase `spark.sql.shuffle.partitions` from 4 to 400+. Add Z-ORDER indexing on `fact_sales(order_date, customer_id)`. Use Delta Liquid Clustering for auto-layout. Separate Gold and Silver job clusters with different SLAs. Consider Databricks Photon engine for Gold aggregations.
+This project was built as an enterprise data engineering case study for RetailNova Analytics.
 
 ---
 
-## 📈 Scalability Roadmap
-
-| Phase | Feature | Value |
-|-------|---------|-------|
-| Current | Batch, daily | ✓ Done |
-| Phase 2 | Streaming (5-min micro-batch) | Near-real-time analytics |
-| Phase 3 | Feature Store + Azure ML | Churn prediction, price optimisation |
-| Phase 4 | Data Mesh | Decentralised domain ownership |
-
----
-
-## 🎓 Lessons Learned
-
-1. **Delta MERGE is powerful but has edge cases** — always test SCD2 merge conditions with duplicate keys before production
-2. **Watermark updates must be atomic** — if the pipeline fails after write but before watermark update, you'll re-process data → ensure idempotent writes (Delta MERGE handles this)
-3. **Shuffle partitions for local dev** — the default 200 partitions is fine for prod but crushes local performance; set to 2-4 for dev
-4. **DQ rules in DB, not code** — code changes require deployment; DB changes can be hotfixed without deployment
-5. **Test negative scenarios explicitly** — corrupt data injection is the only way to verify your DQ rules actually fire
-
----
-
-*Built as a consulting case study for RetailNova Analytics.
-Demonstrates production-level Azure data engineering patterns.*
+<p align="center">
+  <sub>Built with PySpark · Delta Lake · FastAPI · React · Docker</sub>
+</p>
